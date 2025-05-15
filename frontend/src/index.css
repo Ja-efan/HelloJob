@@ -1,30 +1,53 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "./style/fonts.css";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&: is(.dark *));
 
-@font-face {
-  font-family: "LINESeedKR";
-  src: url("/LINESeedKR-Rg.ttf") format("truetype");
-  font-weight: normal;
-  font-style: normal;
-  font-display: swap;
+/* 타이핑 애니메이션 스타일 */
+.typing-demo {
+  width: 320px;
+  animation: typing1 1s steps(19), blink1 0.5s step-end 3 alternate forwards;
+  white-space: nowrap;
+  overflow: hidden;
+  border-color: transparent;
+}
+.typing-demo-2 {
+  width: 540px;
+  animation: blink2 0.5s step-end infinite alternate,
+    typing2 1s steps(22) forwards;
+  animation-delay: 1.5s;
+  white-space: nowrap;
+  overflow: hidden;
+  border-right: 3px solid;
+  opacity: 0;
 }
 
-@font-face {
-  font-family: "NEXONLv1Gothic";
-  src: url("/NEXONLv1GothicLight.woff2") format("truetype");
-  font-weight: light;
-  font-style: normal;
-  font-display: swap;
+@keyframes typing1 {
+  from {
+    width: 0;
+  }
 }
 
-.font-line {
-  font-family: "LINESeedKR", sans-serif;
+@keyframes blink1 {
+  50% {
+    border-right: 3px solid;
+  }
+}
+@keyframes typing2 {
+  from {
+    width: 0;
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
-.font-gothic {
-  font-family: "NEXONLv1Gothic", sans-serif;
+@keyframes blink2 {
+  50% {
+    border-color: transparent;
+  }
 }
 
 * {
@@ -36,6 +59,7 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -46,6 +70,7 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary-light: var(--secondary-light);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
@@ -54,11 +79,22 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-active: var(--active);
+
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+
+  --color-pending: var(--pending);
+  --color-in-progress: var(--in-progress);
+  --color-finish: var(--finish);
+
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -67,33 +103,41 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-text-foreground: var(--text-foreground);
+  --color-text-muted-foreground: var(--text-muted-foreground);
+  --color-text-disabled: var(--text-disabled);
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --radius: 0.5rem;
+  --background: #f8f9fc;
+  --foreground: #2a2c35;
+  --card: #ffffff;
+  --card-foreground: #2a2c35;
+  --popover: #ffffff;
+  --popover-foreground: #2a2c35;
+  --primary: #886bfb;
+  --primary-foreground: #ffffff;
+  --secondary: #af9bff;
+  --secondary-light: #f7f5ff;
+  --secondary-foreground: #2a2c35;
+  --muted: #f5f7fd;
+  --muted-foreground: #6e7180;
+  --accent: #6f52e0;
+  --accent-foreground: #ffffff;
+  --destructive: #ff3b30;
+  --border: #e4e8f0;
+  --input: #ffffff;
+  --ring: #886bfb;
+  --active: #cec6f5;
+
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
+
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -102,6 +146,17 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  --text-foreground: #2a2c35;
+  --text-muted-foreground: #6e7180;
+  --text-disabled: #aeb4c5;
+
+  --pending: #eeeeee;
+  --in-progress: #ffc507;
+  --completed: #00ef0c;
+
+  --warning: #ff9500;
+  --error: #ff3b30;
 }
 
 .dark {
@@ -139,10 +194,48 @@
 }
 
 @layer base {
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  :root {
+    font-family: "Pretendard", system-ui;
+    font-weight: 400;
+    color: var(--text-foreground);
+  }
   * {
     @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  .modal-form-overlay {
+    @apply fixed inset-0 bg-black/50 backdrop-blur-[2px] flex items-center justify-center z-50;
+    @apply transition-opacity duration-200;
+  }
+
+  .modal-form-container {
+    @apply bg-card text-card-foreground rounded-lg shadow-lg;
+    @apply w-[45rem] h-full mt-40 overflow-auto px-8 pt-6 pb-28 relative;
+    @apply animate-in fade-in-0 zoom-in-95 duration-300;
+  }
+
+  .modal-overlay {
+    @apply fixed inset-0 bg-black/50 backdrop-blur-[2px] flex items-center justify-center z-101;
+    @apply transition-opacity duration-200;
+  }
+
+  .modal-container {
+    @apply bg-card text-card-foreground rounded-lg shadow-lg;
+    @apply h-full overflow-auto px-6 pt-8 pb-6 relative;
+    @apply animate-in fade-in-0 zoom-in-95 duration-300;
+  }
+
+  .hover-block {
+    @apply duration-100 hover:border-2 hover:border-primary hover:bg-secondary-light;
   }
 }

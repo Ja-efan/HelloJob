@@ -1,0 +1,92 @@
+version: '3.8'           # docker-compose 파일 스펙 버전
+
+services:
+  backend:
+    build: ./backend     # backend Dockerfile 위치
+    ports:
+      - "8080:8080"      # 외부:내부 포트
+    environment:         # 환경변수 설정
+      - SPRING_PROFILES_ACTIVE=dev
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URL=${GOOGLE_REDIRECT_URL}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - DB_URL=${DB_URL}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - SERVER_DOMAIN=${SERVER_DOMAIN}
+      - FASTAPI_URL=${FASTAPI_URL}
+    depends_on:          # 의존성 설정
+      mysql:
+        condition: service_healthy
+    volumes:
+      - gradle-cache:/home/gradle/.gradle
+
+  frontend:
+    build: ./frontend    # frontend Dockerfile 위치
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+      - ai
+    volumes:
+      - npm-cache:/root/.npm
+
+  ai:
+    build: ./ai
+    ports:
+      - "8000:8000"
+    # networks:
+    #   default:
+    #     aliases:
+    #       - hellojob-app
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DART_API_KEY=${DART_API_KEY}
+      - NAVER_CLIENT_ID=${NAVER_CLIENT_ID}
+      - NAVER_CLIENT_SECRET=${NAVER_CLIENT_SECRET}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - pip-cache:/root/.cache/pip
+      # - ./ai/app:/root/hellojob/app
+  
+  nginx:
+    build: ./nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - frontend
+      - backend
+      - ai
+    restart: always
+    volumes:
+      - /var/www/certbot:/var/www/certbot
+      - /etc/letsencrypt:/etc/letsencrypt
+
+  mysql:
+    image: mysql:8.0.4     # MySQL 이미지
+    healthcheck:
+      test: ["CMD", "mysql", "--user=${MYSQL_USER}", "--password=${MYSQL_PASSWORD}", "-e", "SELECT 1"]
+      interval: 5s    # 5초마다 체크
+      timeout: 3s     # 체크 타임아웃 3초
+      retries: 3      # 3번 재시도
+      start_period: 15s  # 초기 시작 대기 시간 15초
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_DATABASE=hellojob
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+    ports:
+      - "23309:3306"
+    volumes:            # 데이터 영속성
+      - mysql_data:/var/lib/mysql
+
+volumes:
+  mysql_data:          # MySQL 데이터 저장용 볼륨
+  npm-cache:           # npm 캐싱 볼륨
+  gradle-cache:        # gradle 캐싱 볼륨
+  pip-cache:           # pip 캐싱 볼륨

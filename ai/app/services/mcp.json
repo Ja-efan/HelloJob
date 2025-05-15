@@ -1,0 +1,19 @@
+{
+    "mcpServers": {
+        "dart-mcp": {
+            "command": "python", 
+            "args": ["/root/hellojob/app/mcp/dart_mcp/dart.py"],
+            "env": {
+                "DART_API_KEY": "YOUR_DART_API_KEY_IN_DOTENV"
+            }
+        },
+        "naver-search": {
+            "command": "/usr/bin/node",
+            "args": ["/root/hellojob/app/mcp/naver-search-mcp/dist/src/index.js"],
+            "env": {
+                "NAVER_CLIENT_ID": "YOUR_NAVER_CLIENT_ID_IN_DOTENV",
+                "NAVER_CLIENT_SECRET": "YOUR_NAVER_CLIENT_SECRET_IN_DOTENV"
+            }
+        }
+    }
+}

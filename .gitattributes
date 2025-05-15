@@ -1,0 +1,2 @@
+# ai/start.sh 파일 줄바꿈 문자 변경
+start.sh text eol=lf

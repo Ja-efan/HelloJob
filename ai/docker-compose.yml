@@ -1,0 +1,17 @@
+services:
+  hellojob-app:
+    image: hellojob-ai # Dockerfile 빌드 시 사용할 이미지 이름
+    container_name: hellojob-ai
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./main.py:/root/hellojob/main.py
+      - ./app:/root/hellojob/app
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DART_API_KEY=${DART_API_KEY}
+      - NAVER_CLIENT_ID=${NAVER_CLIENT_ID}
+      - NAVER_CLIENT_SECRET=${NAVER_CLIENT_SECRET}

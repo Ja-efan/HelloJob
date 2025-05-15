@@ -4,3 +4,7 @@ openai
 python-dotenv
 colorlog
 requests
+openai-agents
+mcp
+pytest 
+pytest-asyncio
