@@ -14,3 +14,7 @@ chardet
 colorama
 markdownify
 pytz
+langgraph
+langsmith
+langchain-mcp-adapters
+langchain-openai
