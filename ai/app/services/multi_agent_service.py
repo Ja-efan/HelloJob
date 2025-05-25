@@ -12,6 +12,8 @@ import uuid
 from app.core.mcp_core import get_mcp_servers
 from app.core.logger import app_logger
 
+from app.schemas import company
+
 logger = app_logger
 
 # LangSmith 설정
@@ -230,6 +232,11 @@ class AgentState(TypedDict):
     user_prompt: str
     next: str
     sender: str
+    # 분석 옵션 추가
+    base: bool
+    plus: bool
+    fin: bool
+    swot: bool
     # 각 에이전트의 결과를 저장
     basic_info_result: str
     dart_result: str  
@@ -258,7 +265,8 @@ async def basic_info_agent_node(state: AgentState):
             prompt=f"""당신은 '제트'라는 이름의 기업 분석 전문 AI 에이전트로, {state['company_name']}의 최신 기업 정보를 검색하여 수집하고 분석합니다. 
 반환할 기본 정보는 '주요 제품 및 브랜드(서비스)'와 '기업 비전(핵심가치)' 입니다. 
 두 정보에 대한 내용을 찾을 때 까지 적절한 도구를 활용하여 검색하세요.
-결과는 간결하고 구체적으로 작성해주세요."""
+결과는 간결하고 구체적으로 작성해주세요.""",
+            response_format=company.CompanyAnalysisDefault
         )
         
         result = await agent.ainvoke({
@@ -308,12 +316,59 @@ async def dart_agent_node(state: AgentState):
         
         print(f"🎯 DART 에이전트에서 사용할 도구: {[tool.name for tool in dart_tools]}")
         
+        # 🔧 동적 Pydantic 모델 생성 (company_analysis_service.py 방식 참고)
+        from pydantic import create_model
+        from typing import Optional
+        
+        # 분석 타입 설정
+        analysis_types = []
+        if state['base']:
+            analysis_types.append("base")
+        if state['plus']:
+            analysis_types.append("plus")
+        if state['fin']:
+            analysis_types.append("fin")
+        
+        # Pydantic 모델 필드 정의
+        model_fields = {
+            "used_docs": (List[str], ...),
+        }
+        
+        if "base" in analysis_types:
+            model_fields["base"] = (Optional[company.CompanyAnalysisBase], None)
+        if "plus" in analysis_types:
+            model_fields["plus"] = (Optional[company.CompanyAnalysisPlus], None)
+        if "fin" in analysis_types:
+            model_fields["fin"] = (Optional[company.CompanyAnalysisFin], None)
+            
+        # 동적으로 Pydantic 모델 생성
+        DynamicCompanyAnalysisOutput = create_model('DynamicCompanyAnalysisOutput', **model_fields)
+        
+        logger.info(f"🔧 DART 에이전트 동적 모델 필드: {list(model_fields.keys())}")
+        
         llm = ChatOpenAI(model="gpt-4.1", temperature=0.7)
         
-        agent = create_react_agent(
-            llm,
-            dart_tools,
-            prompt=f"""당신은 '제트'라는 이름의 기업 분석 전문 AI 에이전트로, {state['company_name']}의 공시 정보(DART)를 활용하여 기업 재무 분석을 진행합니다.
+        # 분석 컨텍스트 구성
+        dart_context_parts = []
+        dart_context_parts.append(f"DART API를 활용하여 {state['company_name']}의 기업 분석 내용을 제공하세요.")
+        dart_context_parts.append(f"기업명은 반드시 주어진 그대로 사용하세요. 기업명: {state['company_name']}")
+        dart_context_parts.append("분석에 사용한 문서는 문서명과 문서등록일을 포함하여 used_docs에 추가하세요.")
+        dart_context_parts.append("포함할 내용은 다음과 같습니다:")
+        
+        if "base" in analysis_types:
+            dart_context_parts.append("사업의 개요(business_overview), 주요 제품 및 서비스(main_products_services), 주요계약 및 연구개발활동(major_contracts_rd_activities), 기타 참고사항(other_references),")
+            dart_context_parts.append("매출액(sales_revenue), 영업이익(operating_profit), 당기순이익(net_income),")
+            
+        if "plus" in analysis_types:
+            dart_context_parts.append("원재료 및 생산설비(raw_materials_facilities), 매출 및 수주상황(sales_order_status), 위험관리 및 파생거래(risk_management_derivatives),")
+            
+        if "fin" in analysis_types:
+            dart_context_parts.append("자산 총계(total_assets), 부채 총계(total_liabilities), 자본 총계(total_equity),")
+            dart_context_parts.append("영업활동 현금흐름(operating_cash_flow), 투자활동 현금흐름(investing_cash_flow), 재무활동 현금흐름(financing_cash_flow)")
+
+        dart_context_parts.append("해당 정보가 없다면 '정보 없음'이라고 명시적으로 값에 포함하여 출력하세요.")
+        
+        dart_prompt = f"""당신은 '제트'라는 이름의 기업 분석 전문 AI 에이전트로, {state['company_name']}의 공시 정보(DART)를 활용하여 기업 재무 분석을 진행합니다.
 
 🔧 사용 가능한 도구:
 - dart-mcp_search_disclosure: 공시 정보 검색 (전자공시시스템 DART)
@@ -326,17 +381,27 @@ async def dart_agent_node(state: AgentState):
 2. 최근 1-2년간의 주요 공시 정보를 검색하세요
 3. 재무 데이터와 사업 정보를 조합하여 분석하세요
 
-주요 재무 지표와 사업 현황을 중심으로 분석해주세요."""
+주요 재무 지표와 사업 현황을 중심으로 분석해주세요.
+
+**요청된 분석 범위:** {', '.join(analysis_types)}"""
+        
+        agent = create_react_agent(
+            llm,
+            dart_tools,
+            prompt=dart_prompt,
+            response_format=DynamicCompanyAnalysisOutput
         )
         
+        dart_context = "\n".join(dart_context_parts)
+        
         result = await agent.ainvoke({
-            "messages": [{"role": "user", "content": f"{state['company_name']} 기업의 공시 정보를 분석해주세요."}]
+            "messages": [{"role": "user", "content": dart_context}]
         })
         
         final_output = result["messages"][-1].content if result["messages"] else "공시 정보 분석 실패"
         
         return {
-            "messages": [f"공시정보 에이전트 완료: {state['company_name']} DART 분석"],
+            "messages": [f"공시정보 에이전트 완료: {state['company_name']} DART 분석 ({', '.join(analysis_types)})"],
             "dart_result": final_output,
             "sender": "dart_agent"
         }
@@ -367,7 +432,8 @@ async def news_agent_node(state: AgentState):
             llm,
             tools,
             prompt=f"""당신은 '제트'라는 이름의 기업 분석 전문 AI 에이전트로, {state['company_name']}와 관련된 최신 뉴스를 분석하고 요약합니다.
-최근 6개월 내의 주요 뉴스를 중심으로 기업의 동향과 이슈를 파악해주세요."""
+최근 6개월 내의 주요 뉴스를 중심으로 기업의 동향과 이슈를 파악해주세요.""",
+            response_format=company.CompanyNews
         )
         
         result = await agent.ainvoke({
@@ -399,20 +465,64 @@ async def news_agent_node(state: AgentState):
 )
 async def swot_agent_node(state: AgentState):
     """SWOT 분석 에이전트"""
+    # SWOT 분석이 요청되지 않은 경우 빈 결과 반환
+    if not state['swot']:
+        return {
+            "messages": [f"SWOT 분석 스킵: {state['company_name']} (요청되지 않음)"],
+            "swot_result": "SWOT 분석이 요청되지 않았습니다.",
+            "sender": "swot_agent"
+        }
+    
     tools, mcp_client = await setup_mcp_tools()
     
     try:
+        # 🔧 SWOT 전용 Pydantic 모델 정의 (company_analysis_service.py 방식 참고)
+        from pydantic import BaseModel, Field
+        from typing import List, Optional
+
+        class DynamicSwotAnalysis(BaseModel):
+            strengths: List[str] = Field(default_factory=list, description="기업의 강점 목록")
+            weaknesses: List[str] = Field(default_factory=list, description="기업의 약점 목록")
+            opportunities: List[str] = Field(default_factory=list, description="기업의 기회 목록")
+            threats: List[str] = Field(default_factory=list, description="기업의 위협 목록")
+            strength_tags: List[str] = Field(default_factory=list, description="강점 관련 태그 목록")
+            weakness_tags: List[str] = Field(default_factory=list, description="약점 관련 태그 목록")
+            opportunity_tags: List[str] = Field(default_factory=list, description="기회 관련 태그 목록")
+            threat_tags: List[str] = Field(default_factory=list, description="위협 관련 태그 목록")
+            swot_summary: Optional[str] = Field(None, description="SWOT 분석 종합 요약")
+            
+        logger.info(f"🔧 SWOT 에이전트 동적 모델 생성 완료")
+        
         llm = ChatOpenAI(model="gpt-4.1", temperature=0.7)
+        
+        swot_prompt = f"""당신은 '제트'라는 이름의 기업 분석 전문 AI 에이전트로, {state['company_name']}의 강점(Strengths), 약점(Weaknesses), 기회(Opportunities), 위협(Threats)을 분석합니다.
+🔧 사용 가능한 도구:
+- swot_analysis: SWOT 분석 도구
+- dart-mcp_search_disclosure: 공시 정보 검색 (전자공시시스템 DART)
+- dart-mcp_search_detailed_financial_data: 상세 재무 데이터 검색
+- dart-mcp_search_business_information: 사업 정보 검색
+- dart-mcp_get_current_date: 현재 날짜 조회
+- news_agent: 뉴스 분석 도구
+- google_search: 구글 검색 도구
+
+🎯 분석 목표:
+- 각 요소별로 구체적인 사례와 근거를 제시해주세요
+- 최신 정보를 활용하여 현실적이고 정확한 분석을 수행해주세요
+- 각 항목별로 관련 태그도 함께 제공해주세요
+
+** swot_analysis 도구를 사용하여 체계적인 분석을 진행해주세요.**
+
+**사용자 요청사항:** {state['user_prompt'] if state['user_prompt'] else '종합적인 SWOT 분석'}"""
         
         agent = create_react_agent(
             llm,
             tools,
-            prompt=f"""당신은 '제트'라는 이름의 기업 분석 전문 AI 에이전트로, {state['company_name']}의 강점(Strengths), 약점(Weaknesses), 기회(Opportunities), 위협(Threats)을 분석합니다.
-각 요소별로 구체적인 사례와 근거를 제시해주세요."""
+            prompt=swot_prompt,
+            response_format=DynamicSwotAnalysis
         )
         
         result = await agent.ainvoke({
-            "messages": [{"role": "user", "content": f"{state['company_name']} 기업의 SWOT 분석을 해주세요."}]
+            "messages": [{"role": "user", "content": f"최신 정보를 활용하여 {state['company_name']} 기업의 SWOT 분석을 수행해주세요."}]
         })
         
         final_output = result["messages"][-1].content if result["messages"] else "SWOT 분석 실패"
@@ -424,7 +534,7 @@ async def swot_agent_node(state: AgentState):
         }
         
     except Exception as e:
-        print(f"SWOT 에이전트 오류: {e}")
+        logger.error(f"SWOT 에이전트 오류: {e}")
         return {
             "messages": [f"SWOT 에이전트 오류: {str(e)}"],
             "swot_result": f"SWOT 분석 실패: {str(e)}",
@@ -474,6 +584,76 @@ async def integration_agent_node(state: AgentState):
     tools, mcp_client = await setup_mcp_tools()
     
     try:
+        # 🔧 동적 통합 모델 생성 (OpenAI API JSON Schema 호환)
+        from pydantic import create_model
+        from typing import Optional, Dict, Any
+        import json
+        
+        # 각 에이전트 결과를 파싱해서 구조화된 데이터로 변환
+        def parse_agent_result(result_str: str, fallback_value=None):
+            """에이전트 결과 문자열을 JSON으로 파싱 시도"""
+            if not result_str or result_str == "정보 없음":
+                return fallback_value
+            
+            try:
+                # JSON 형태로 파싱 시도
+                if result_str.strip().startswith('{') or result_str.strip().startswith('['):
+                    return json.loads(result_str)
+                else:
+                    # JSON이 아닌 경우 그대로 반환
+                    return result_str
+            except (json.JSONDecodeError, Exception):
+                # 파싱 실패시 원본 문자열 반환
+                return result_str
+        
+        # 각 에이전트의 파싱된 결과
+        basic_info_parsed = parse_agent_result(state.get('basic_info_result'), {})
+        dart_parsed = parse_agent_result(state.get('dart_result'), {})
+        news_parsed = parse_agent_result(state.get('news_result'), {})
+        swot_parsed = parse_agent_result(state.get('swot_result'), {})
+        
+        # 🔧 정적 통합 결과 모델 정의 (OpenAI API 호환)
+        # class IntegrationOutput(BaseModel):
+        #     """통합 분석 결과 모델 - OpenAI API JSON Schema 호환"""
+        #     basic_info: Optional[str] = Field(default="", description="기업 기본 정보 분석 결과")
+        #     dart: Optional[str] = Field(default="", description="공시 정보 분석 결과") 
+        #     news: Optional[str] = Field(default="", description="뉴스 분석 결과")
+        #     swot: Optional[str] = Field(default="", description="SWOT 분석 결과")
+            
+        class IntegrationOutput(BaseModel):
+            basic_info: company.CompanyAnalysisDefault = Field(default_factory=company.CompanyAnalysisDefault)
+            news: company.CompanyNews = Field(default_factory=company.CompanyNews)
+            swot: company.CompanyAnalysisSwot = Field(default_factory=company.CompanyAnalysisSwot)
+            
+        dart_fileds = {
+            "used_docs": (List[str], ...),
+        }
+        if state.get("base"):
+            dart_fileds["base"] = (Optional[company.CompanyAnalysisBase], None)
+        if state.get("plus"):
+            dart_fileds["plus"] = (Optional[company.CompanyAnalysisPlus], None)
+        if state.get("fin"):
+            dart_fileds["fin"] = (Optional[company.CompanyAnalysisFin], None)
+        
+        CompanyAnalysisOutput = create_model('CompanyAnalysisOutput', **dart_fileds)
+        DynamicIntegrationOutput = create_model("DynamicIntegrationOutput",
+                                                __base__=IntegrationOutput,
+                                                dart=CompanyAnalysisOutput)
+    
+        
+        logger.info(f"🔧 통합 에이전트: OpenAI API 호환 response_format 사용")
+        
+        # 분석 요청된 항목들을 명시적으로 확인
+        requested_sections = []
+        if state.get('basic_info_result'):
+            requested_sections.append("basic_info")
+        if state.get('dart_result'):
+            requested_sections.append("dart")
+        if state.get('news_result'):
+            requested_sections.append("news")
+        if state.get('swot_result'):
+            requested_sections.append("swot")
+        
         # 모든 에이전트 결과를 통합하여 최종 분석 수행
         integration_prompt = f"""
 {state['company_name']} 기업에 대한 종합 분석을 수행합니다.
@@ -486,8 +666,14 @@ SWOT 분석: {state.get('swot_result', '정보 없음')}
 
 사용자 요청: {state['user_prompt']}
 
-위 정보들을 종합하여 CompanyAnalysisMultiAgentOutput 형식으로 최종 분석 결과를 생성해주세요.
-모든 정보를 종합하여 구조화된 데이터로 정리해주세요.
+각 에이전트의 결과를 해당 필드에 정리하여 통합해주세요:
+- basic_info: 기업 기본 정보 분석 결과
+- dart: 공시 정보 분석 결과  
+- news: 뉴스 분석 결과
+- swot: SWOT 분석 결과
+
+각 필드에는 해당 에이전트의 분석 결과를 문자열 형태로 요약하여 포함해주세요.
+정보가 없는 경우 "정보 없음"으로 표시해주세요.
 """
         
         llm = ChatOpenAI(model="gpt-4.1", temperature=0.7)
@@ -497,43 +683,43 @@ SWOT 분석: {state.get('swot_result', '정보 없음')}
             tools,
             prompt="""당신은 기업 분석 통합 전문 AI 에이전트입니다. 
 각 전문 에이전트들이 수집한 정보를 종합하여 최종적인 기업 분석 결과를 생성합니다.
-결과는 구조화된 형태로 정리해주세요.""",
-            response_format=CompanyAnalysisMultiAgentOutput,
+각 에이전트의 결과를 해당 필드(basic_info, dart, news, swot)에 매핑하여 구조화된 형태로 정리해주세요.
+에이전트의 원본 결과를 요약하고 정리하여 각 필드에 문자열로 저장해주세요.""",
+            response_format=DynamicIntegrationOutput
         )
         
         result = await agent.ainvoke({
             "messages": [{"role": "user", "content": integration_prompt}]
         })
         
-        # 결과를 CompanyAnalysisMultiAgentOutput 형식으로 변환
-        final_output_content = result["messages"][-1].content if result["messages"] else ""
+        logger.info(f"🔧 통합 에이전트 결과: {result}")
         
-        # 간단한 파싱을 통해 구조화된 데이터 생성
-        try:
-            # 기본 구조 생성
-            analysis_output = final_output_content
-            
-        except Exception as e:
-            print(f"분석 결과 구조화 중 오류: {e}")
-            analysis_output = CompanyAnalysisMultiAgentOutput()
-            analysis_output.company_basic_information.company_name = state['company_name']
-            analysis_output.company_basic_information.company_analysis_summary = final_output_content
+        # 통합 결과 추출 (response_format 사용으로 구조화된 결과)
+        final_output_content = result["structured_response"]
+        
+        logger.info(f"🔧 통합 에이전트 구조화된 결과 수신: {final_output_content}")
         
         return {
-            "messages": [f"{state['company_name']} 기업 분석 완료"],
-            "final_analysis": analysis_output,
+            "messages": [f"통합 에이전트 완료: {state['company_name']} 기업 분석"],
+            "final_analysis": final_output_content,
             "sender": "integration_agent"
         }
         
     except Exception as e:
-        print(f"통합분석 에이전트 오류: {e}")
-        analysis_output = CompanyAnalysisMultiAgentOutput()
-        analysis_output.company_basic_information.company_name = state['company_name']
-        analysis_output.company_basic_information.company_analysis_summary = f"분석 중 오류 발생: {str(e)}"
+        logger.error(f"통합분석 에이전트 오류: {e}")
+        
+        # 오류 발생시 기본 구조로 폴백
+        error_result = {
+            "basic_info": state.get('basic_info_result', '분석 오류') or '분석 오류',
+            "dart": state.get('dart_result', '분석 오류') or '분석 오류',
+            "news": state.get('news_result', '분석 오류') or '분석 오류',
+        }
+        if state.get('swot', False):
+            error_result["swot"] = state.get('swot_result', '분석 오류') or '분석 오류'
         
         return {
             "messages": [f"통합분석 에이전트 오류: {str(e)}"],
-            "final_analysis": analysis_output,
+            "final_analysis": error_result,
             "sender": "integration_agent"
         }
     finally:
@@ -604,6 +790,11 @@ async def company_analysis_multi_agent(company_name, base, plus, fin, swot, user
         "user_prompt": user_prompt,
         "next": "기본정보",
         "sender": "user",
+        # 분석 옵션 추가
+        "base": base,
+        "plus": plus,
+        "fin": fin,
+        "swot": swot,
         "basic_info_result": None,
         "dart_result": None,
         "news_result": None, 
@@ -645,7 +836,7 @@ async def company_analysis_multi_agent(company_name, base, plus, fin, swot, user
     
     print(f"🚀 {company_name} 기업 분석 시작 (Run ID: {run_id[:8]})")
     
-    async for output in app.astream(initial_state):
+    async for output in app.astream(initial_state, config={"recursion_limit": 50}):
         for key, value in output.items():
             node_count += 1
             print(f"✅ 노드 '{key}' 실행 완료 ({node_count}번째 단계)")
@@ -686,7 +877,15 @@ async def company_analysis_multi_agent(company_name, base, plus, fin, swot, user
         return result
     else:
         print("⚠️ 분석 실패: 최종 결과를 생성하지 못했습니다.")
-        return CompanyAnalysisMultiAgentOutput()
+        # 기본 구조로 폴백
+        fallback_result = {
+            "basic_info": {},
+            "dart": {},
+            "news": {},
+        }
+        if swot:
+            fallback_result["swot"] = {}
+        return fallback_result
     
 # LangSmith 테스트 및 설정 확인 함수들
 async def test_langsmith_connection():
