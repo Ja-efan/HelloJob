@@ -105,8 +105,8 @@ async def create_interview_questions_from_cover_letter(request: interview.Create
         # API 응답에서 구조화된 데이터로 질문 추출
         interview_questions = response.choices[0].message.parsed.questions
         
-        # 250524 고정 질문 추가 (0526 이후 아래 코드 제거)
-        interview_questions[0] = "최신 AI 기술 트렌드나 시장의 요구를 발 빠르게 파악하기 위해 지금까지 어떤 노력을 해오셨으며, 실제로 새로운 기술을 업무 또는 프로젝트에 도입해 본 경험이 있다면 구체적으로 설명해 주세요."
+        # # 250524 고정 질문 추가 (0526 이후 아래 코드 제거)
+        # interview_questions[0] = "최신 AI 기술 트렌드나 시장의 요구를 발 빠르게 파악하기 위해 지금까지 어떤 노력을 해오셨으며, 실제로 새로운 기술을 업무 또는 프로젝트에 도입해 본 경험이 있다면 구체적으로 설명해 주세요."
         return interview_questions
     
     interview_questions = await request_queue.enqueue(

@@ -129,7 +129,7 @@ async def company_analysis_all(company_name, base, plus, fin, swot, user_prompt)
         default_info_agent = Agent(
             name=f"Company Default Info Searcher: {company_name}",
             instructions=instructions,
-            model="gpt-4.1-mini",
+            model="gpt-4.1",
             output_type=company.CompanyAnalysisDefault,
             mcp_servers=mcp_servers  # 기존에 설정된 MCP 서버 사용
         )
@@ -188,7 +188,7 @@ async def company_analysis_all(company_name, base, plus, fin, swot, user_prompt)
         dart_agent = Agent(
             name=f"Company Dart Assistant: {company_name}",
             instructions=instructions,
-            model="gpt-4.1-mini",
+            model="gpt-4.1",
             output_type=CompanyAnalysisOutput,
             mcp_servers=mcp_servers  # 기존에 설정된 MCP 서버 사용
         )
@@ -307,7 +307,7 @@ async def company_analysis_all(company_name, base, plus, fin, swot, user_prompt)
         news_agent = Agent(
             name=f"Company News Analyzer: {company_name}",
             instructions=instructions,
-            model="gpt-4.1-mini",
+            model="gpt-4.1",
             output_type=company.CompanyNews,
             mcp_servers=mcp_servers  # 기존에 설정된 MCP 서버 사용
         )
@@ -361,16 +361,23 @@ async def company_analysis_all(company_name, base, plus, fin, swot, user_prompt)
         instructions = ""
         if user_prompt:
             instructions += f"""당신은 '제트'라는 이름의 AI로, 기업 SWOT 분석을 하는 전문가입니다.
+            
 swot_analysis MCP를 활용하여 사용자의 요청 사항을 반영하는 SWOT 분석 결과를 반환합니다.
+
+**반드시 swot_analysis MCP를 활용하여 분석하세요.**
+
 사용자 요청사항: {user_prompt}"""
         else:
-            instructions = f"당신은 '제트'라는 이름의 AI로, 기업 SWOT 분석을 하는 전문가입니다. swot_analysis MCP를 활용하여 SWOT 분석 결과를 반환합니다."
+            instructions = f"""당신은 '제트'라는 이름의 AI로, 기업 SWOT 분석을 하는 전문가입니다. swot_analysis MCP를 활용하여 SWOT 분석 결과를 반환합니다.
+
+**반드시 swot_analysis MCP를 활용하여 분석하세요.**
+"""
         
         # Agent 생성 - 미리 설정된 MCP 서버 사용
         swot_agent = Agent(
             name=f"Company SWOT Analyzer: {company_name}",
             instructions=instructions,
-            model="gpt-4.1-mini",
+            model="gpt-4.1",
             output_type=SimpleSwot,
             mcp_servers=mcp_servers  # 기존에 설정된 MCP 서버 사용
         )
