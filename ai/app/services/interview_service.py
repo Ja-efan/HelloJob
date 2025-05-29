@@ -1,10 +1,10 @@
+import os
 from typing import List, Dict
 from pydantic import BaseModel, Field
+from openai import OpenAI
 
 from app.schemas import interview
 from app.prompts.interview_prompts import CREATE_INTERVIEW_QUESTION_PROMPT, INTERVIEW_FEEDBACK_PROMPT
-from app.core.request_queue import get_request_queue
-from app.core.openai_utils import get_rate_limiter
 from app.core.logger import app_logger
 
 logger = app_logger
@@ -60,8 +60,6 @@ async def create_interview_questions_from_cover_letter(request: interview.Create
     """자기소개서 기반 면접 예상 질문 생성 서비스 함수입니다."""
     logger.info(f"면접 예상 질문 생성 요청 - 자기소개서 ID: {request.cover_letter.cover_letter_id}")
     
-    request_queue = get_request_queue()
-    
     system_prompt = CREATE_INTERVIEW_QUESTION_PROMPT
     
     # 사용자 정보 파싱 
@@ -75,8 +73,8 @@ async def create_interview_questions_from_cover_letter(request: interview.Create
     
 {user_info}"""
 
-    async def perform_api_call():
-        rate_limiter = get_rate_limiter()
+    def perform_api_call():
+        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
         
         # Structured outputs을 위한 Pydantic 스키마 사용
         # questions 필드에 정확히 num_questions 개수의 항목을 생성하도록 설정
@@ -91,7 +89,7 @@ async def create_interview_questions_from_cover_letter(request: interview.Create
                 description=f"정확히 {num_questions}개의 면접 예상 질문 목록"
             )
         
-        response = await rate_limiter.chat_completion(
+        response = client.beta.chat.completions.parse(
             model="gpt-4.1", 
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -109,11 +107,7 @@ async def create_interview_questions_from_cover_letter(request: interview.Create
         # interview_questions[0] = "최신 AI 기술 트렌드나 시장의 요구를 발 빠르게 파악하기 위해 지금까지 어떤 노력을 해오셨으며, 실제로 새로운 기술을 업무 또는 프로젝트에 도입해 본 경험이 있다면 구체적으로 설명해 주세요."
         return interview_questions
     
-    interview_questions = await request_queue.enqueue(
-        perform_api_call,
-        priority=5,  # 우선순위 (낮을수록 우선)
-        estimated_tokens=3000
-    )
+    interview_questions = perform_api_call()
     
     logger.info(f"면접 예상 질문 생성 완료: {interview_questions}")
     
@@ -164,8 +158,6 @@ async def feedback_interview(request: interview.FeedbackInterviewRequest)-> inte
     request_ids = [qa_pair.interview_answer_id for qa_pair in request.interview_question_answer_pairs]
     logger.info(f"면접 답변 ID: {request_ids}")
     
-    request_queue = get_request_queue()
-    
     system_prompt = INTERVIEW_FEEDBACK_PROMPT
     
     # 면접 정보 파싱
@@ -175,10 +167,10 @@ async def feedback_interview(request: interview.FeedbackInterviewRequest)-> inte
     
 {interview_info}"""
     
-    async def perform_api_call():
-        rate_limiter = get_rate_limiter()
+    def perform_api_call():
+        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
         
-        response = await rate_limiter.chat_completion(
+        response = client.beta.chat.completions.parse(
             model="gpt-4.1", 
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -192,11 +184,7 @@ async def feedback_interview(request: interview.FeedbackInterviewRequest)-> inte
         # API 응답에서 구조화된 데이터로 피드백 추출
         return response.choices[0].message.parsed
     
-    feedback_response = await request_queue.enqueue(
-        perform_api_call,
-        priority=5,  # 우선순위 (낮을수록 우선)
-        estimated_tokens=3000
-    )
+    feedback_response = perform_api_call()
     
     logger.info(f"면접 피드백 생성 완료")
     logger.info(f"면접 피드백 응답: {feedback_response}")
