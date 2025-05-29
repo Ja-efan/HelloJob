@@ -1,13 +1,10 @@
 import json
 import os
-import hashlib
 from pydantic import BaseModel, create_model
-from typing import List, Optional, Any, Dict, Tuple
-from agents import Agent, WebSearchTool
+from typing import List, Optional, Any
+from agents import Agent, Runner
 
 from app.schemas import company
-from app.core.agent_utils import RateLimitedRunner
-from app.core.request_queue import get_request_queue
 from app.core.mcp_core import get_mcp_servers
 from app.core.logger import app_logger
 
@@ -105,20 +102,10 @@ async def company_analysis_all(company_name, base, plus, fin, swot, user_prompt)
     """
     logger.info(f"company_analysis_all 함수 호출: company_name={company_name}, base={base}, plus={plus}, fin={fin}, swot={swot}, user_prompt={user_prompt}")
     
-    # 요청 큐 가져오기
-    request_queue = get_request_queue()
-    
     # 전역 MCP 서버 목록 가져오기
     mcp_servers = get_mcp_servers()
     
-    # 캐시 키 생성 (company_name + 옵션 조합)
-    options_hash = hashlib.md5(f"{base}_{plus}_{fin}_{swot}".encode()).hexdigest()
-    cache_key_base = f"company_analysis_{company_name}_{options_hash}"
-    
-    
     # 0. 기업 기본 정보 검색 (주요 제품 및 브랜드, 비전)
-    default_info_cache_key = f"{cache_key_base}_default_info"
-    
     # 기업 기본 정보 검색 (주요 제품 및 브랜드, 비전)
     async def perform_default_info_search():
         instructions = """당신은 '제트'라는 이름의 AI로, 최신의 기업 정보 검색도구를 찾아 반환합니다.
@@ -134,7 +121,7 @@ async def company_analysis_all(company_name, base, plus, fin, swot, user_prompt)
             mcp_servers=mcp_servers  # 기존에 설정된 MCP 서버 사용
         )
         
-        default_info_result = await RateLimitedRunner.run(
+        default_info_result = await Runner.run(
             starting_agent=default_info_agent,
             input=f"최신 정보를 활용하여 {company_name} 기업의 기본 정보를 찾아 반환하세요.",
             max_turns=30
@@ -142,9 +129,7 @@ async def company_analysis_all(company_name, base, plus, fin, swot, user_prompt)
         
         return default_info_result.final_output
     
-    # 1. DART 기업 분석 수행 (우선순위 높음)
-    dart_cache_key = f"{cache_key_base}_dart"
-    
+    # 1. DART 기업 분석 수행
     # DART 분석을 위한 비동기 함수 정의
     async def perform_dart_analysis():
         # 분석 타입 설정
@@ -214,7 +199,7 @@ async def company_analysis_all(company_name, base, plus, fin, swot, user_prompt)
         dart_context += "해당 정보가 없다면 '정보 없음'이라고 명시적으로 값에 포함하여 출력하세요.\n\n"
         
         # DART 분석 실행
-        dart_result = await RateLimitedRunner.run(
+        dart_result = await Runner.run(
             starting_agent=dart_agent, 
             input=dart_context,
             max_turns=30
@@ -289,19 +274,46 @@ async def company_analysis_all(company_name, base, plus, fin, swot, user_prompt)
             "company_finance": company_finance,
         }
     
-    # 2. 뉴스 데이터 분석 (우선순위 낮음)
-    news_cache_key = f"{cache_key_base}_news"
-    
+    # 2. 뉴스 데이터 분석
     # 뉴스 분석을 위한 비동기 함수 정의
     async def perform_news_analysis():
         
-        
         instructions = ""
         if user_prompt:
-            instructions += f"""당신은 '제트'라는 이름의 AI로, 기업 뉴스를 분석하고 요약하는 전문가입니다. 다양한 MCP를 활용하여 사용자의 요청 사항을 반영하는 뉴스 기사 분석 결과를 반환합니다.
-            사용자 요청사항: {user_prompt}"""
+            instructions += f"""당신은 '제트'라는 이름의 AI로, 기업 뉴스를 분석하고 상세한 요약을 작성하는 전문가입니다. 
+
+**뉴스 수집 및 필터링 전략:**
+1. 다양한 키워드로 검색하여 폭넓은 뉴스 수집
+2. 제목뿐만 아니라 내용의 유사성도 고려하여 중복 제거
+3. 기사의 중요도와 신뢰성을 평가하여 우선순위 결정
+4. 최소 15개 이상의 서로 다른 관점의 기사 확보
+
+**요약 작성 지침:**
+- 각 주요 뉴스 카테고리별로 상세한 분석 제공 (최소 3-4문장)
+- 시간순 흐름과 인과관계를 명확히 설명
+- 기업에 미치는 영향과 시사점을 구체적으로 분석
+- 전체 요약 길이는 최소 500자 이상으로 작성
+- 정량적 데이터나 구체적 사실이 있다면 반드시 포함
+
+다양한 MCP를 활용하여 사용자의 요청 사항을 반영하는 뉴스 기사 분석 결과를 반환합니다.
+사용자 요청사항: {user_prompt}"""
         else:
-            instructions = f"당신은 '제트'라는 이름의 AI로, 기업 뉴스를 분석하고 요약하는 전문가입니다. 다양한 MCP를 활용하여 뉴스 기사 분석 결과를 반환합니다."
+            instructions = f"""당신은 '제트'라는 이름의 AI로, 기업 뉴스를 분석하고 상세한 요약을 작성하는 전문가입니다. 
+
+**뉴스 수집 및 필터링 전략:**
+1. 다양한 키워드로 검색하여 폭넓은 뉴스 수집 (기업명, 주요 제품/서비스명, CEO명 등)
+2. 제목뿐만 아니라 내용의 유사성도 고려하여 중복 제거
+3. 기사의 중요도와 신뢰성을 평가하여 우선순위 결정
+4. 최소 15개 이상의 서로 다른 관점의 기사 확보
+
+**요약 작성 지침:**
+- 각 주요 뉴스 카테고리별로 상세한 분석 제공 (재무성과, 사업전략, 시장동향, 기술개발, 인사/조직, 규제/정책 등)
+- 시간순 흐름과 인과관계를 명확히 설명
+- 기업에 미치는 영향과 시사점을 구체적으로 분석
+- 전체 요약 길이는 최소 500자 이상으로 작성
+- 정량적 데이터나 구체적 사실이 있다면 반드시 포함
+
+다양한 MCP를 활용하여 뉴스 기사 분석 결과를 반환합니다."""
         
         # Agent 생성 - 미리 설정된 MCP 서버 사용
         news_agent = Agent(
@@ -312,14 +324,41 @@ async def company_analysis_all(company_name, base, plus, fin, swot, user_prompt)
             mcp_servers=mcp_servers  # 기존에 설정된 MCP 서버 사용
         )
         
-        # 분석 컨텍스트 구성
-        num_news = 30
-        news_context = f"뉴스 데이터를 활용하여 {company_name} 기업의 기업 분석 내용을 제공하세요. 뉴스 기사는 최신 순으로 {num_news}개를 가져오며, 뉴스 제목이 중복되는 경우에는 제외합니다. "
-        news_context += "포함할 내용은 다음과 같습니다: \n"
-        news_context += "summary, urls"
+        # 분석 컨텍스트 구성 - 더 상세하고 전략적으로 수정
+        num_news = 50  # 기사 수를 늘려서 더 많은 선택지 확보
+        news_context = f"""
+{company_name} 기업에 대한 종합적인 뉴스 분석을 수행하세요.
+
+**수집 전략:**
+1. 기본 검색: "{company_name}" (최신 {num_news//2}개)
+2. 확장 검색: 주요 제품/서비스명, CEO명, 계열사명 등으로 추가 검색 ({num_news//2}개)
+3. 중복 제거: 제목 유사도 80% 이상 및 내용 유사도 70% 이상인 기사 제거
+4. 품질 필터링: 신뢰할 수 있는 언론사 우선, 보도자료성 기사는 후순위
+
+**분석 요구사항:**
+- 최종적으로 최소 15개 이상의 서로 다른 관점의 기사 확보
+- 다음 카테고리별로 분류하여 분석:
+  * 재무성과 및 실적 관련
+  * 신사업 및 전략 관련  
+  * 기술개발 및 혁신 관련
+  * 시장 및 경쟁 환경 관련
+  * 인사 및 조직 변화 관련
+  * 규제 및 정책 영향 관련
+  * 기타 중요 이슈
+
+**요약 작성 기준:**
+- 전체 길이: 최소 500자 이상
+- 각 카테고리별 상세 분석 (해당 뉴스가 있는 경우)
+- 시간순 흐름과 인과관계 명시
+- 구체적 수치나 날짜 포함
+- 기업에 미치는 단기/장기 영향 분석
+
+
+포함할 내용: summary, urls
+"""
         
         # 뉴스 분석 실행
-        news_result = await RateLimitedRunner.run(
+        news_result = await Runner.run(
             starting_agent=news_agent,
             input=news_context,
             max_turns=30
@@ -339,8 +378,6 @@ async def company_analysis_all(company_name, base, plus, fin, swot, user_prompt)
         
 
     # 3. SWOT 분석
-    swot_cache_key = f"{cache_key_base}_swot"
-    
     # SWOT 분석을 위한 비동기 함수 정의
     async def perform_swot_analysis():
         from pydantic import BaseModel, Field
@@ -385,7 +422,7 @@ swot_analysis MCP를 활용하여 사용자의 요청 사항을 반영하는 SWO
         swot_context = f"최신 정보를 활용하여 {company_name} 기업을 SWOT 분석하고 결과를 반환하세요."
         
         try:
-            swot_result = await RateLimitedRunner.run(
+            swot_result = await Runner.run(
                 starting_agent=swot_agent,
                 input=swot_context,
                 max_turns=30
@@ -439,46 +476,36 @@ swot_analysis MCP를 활용하여 사용자의 요청 사항을 반영하는 SWO
             }
         
     
-    # 3. 큐를 통해 분석 작업 실행 (DART 분석 우선순위 높게)
+    # 3. 분석 작업 실행
     try:
-        # 세 작업을 큐에 넣고 실행
-        default_info_result_task = request_queue.enqueue(
-            perform_default_info_search,
-            priority=1,  # 낮은 숫자 = 높은 우선순위
-            estimated_tokens=10000,
-            cache_key=default_info_cache_key
-        )
+        # 각 작업을 직접 실행
+        logger.info(f"분석 작업 시작: {company_name}")
         
-        dart_result_task = request_queue.enqueue(
-            perform_dart_analysis,
-            priority=5,  # 낮은 숫자 = 높은 우선순위
-            estimated_tokens=20000,
-            cache_key=dart_cache_key
-        )
+        logger.info(f"기본 정보 검색 시작: {company_name}")
+        default_info_result = await perform_default_info_search()
+        logger.info(f"기본 정보 검색 완료: {company_name}")
         
-        news_result_task = request_queue.enqueue(
-            perform_news_analysis,
-            priority=10,  # 낮은 숫자 = 높은 우선순위
-            estimated_tokens=10000,
-            cache_key=news_cache_key
-        )
+        dart_result = dict() 
+        if base or plus or fin:
+            logger.info(f"DART 분석 시작: {company_name}")
+            dart_result = await perform_dart_analysis()
+            logger.info(f"DART 분석 완료: {company_name}")
+        else: 
+            dart_result = {
+                "company_brand": default_info_result.company_brand,
+                "company_vision": default_info_result.company_vision,
+                "company_analysis": "",
+                "company_finance": "",
+            }
+        
+        logger.info(f"뉴스 분석 시작: {company_name}")
+        news_result = await perform_news_analysis()
+        logger.info(f"뉴스 분석 완료: {company_name}")
+        
+        logger.info(f"SWOT 분석 시작: {company_name}")
         if swot:
-            swot_result_task = request_queue.enqueue(
-                perform_swot_analysis,
-                priority=15,  # 낮은 숫자 = 높은 우선순위
-                estimated_tokens=20000,
-                cache_key=swot_cache_key
-            )
-        
-        
-        # 모든 작업 완료 대기
-        default_info_result = await default_info_result_task
-        dart_result = await dart_result_task
-        dart_result["company_brand"] = default_info_result.company_brand
-        dart_result["company_vision"] = default_info_result.company_vision
-        news_result = await news_result_task
-        if swot:
-            swot_result = await swot_result_task
+            swot_result = await perform_swot_analysis()
+            logger.info(f"SWOT 분석 완료: {company_name}")
         else:
             swot_result = {
                 "strengths": {
@@ -500,8 +527,8 @@ swot_analysis MCP를 활용하여 사용자의 요청 사항을 반영하는 SWO
                 "swot_summary": ""
             }
         
-            
-        # 4. 결과 합치기
+        # 4. 분석 결과 병합
+        logger.info(f"분석 결과 병합: {company_name}")
         response = {
             "default": default_info_result,
             **dart_result,

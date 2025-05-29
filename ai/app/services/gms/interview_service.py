@@ -1,11 +1,9 @@
 import logging
-from typing import List, Dict
+from typing import List
 from pydantic import BaseModel, Field
 
 from app.schemas import interview
 from app.prompts.interview_prompts import CREATE_INTERVIEW_QUESTION_PROMPT, INTERVIEW_FEEDBACK_PROMPT
-from app.core.request_queue import get_request_queue
-from app.core.openai_utils import get_rate_limiter
 from app.services.gms.utils import gms_utils
 from agents import Runner
 
