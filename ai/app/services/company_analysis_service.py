@@ -301,13 +301,13 @@ async def company_analysis_all(company_name, base, plus, fin, swot, user_prompt)
             instructions = f"""당신은 '제트'라는 이름의 AI로, 기업 뉴스를 분석하고 상세한 요약을 작성하는 전문가입니다. 
 
 **뉴스 수집 및 필터링 전략:**
-1. 다양한 키워드로 검색하여 폭넓은 뉴스 수집 (기업명, 주요 제품/서비스명, CEO명 등)
+1. 다양한 키워드로 검색하여 폭넓은 뉴스 수집 (기업명, 주요 제품/서비스명 등)
 2. 제목뿐만 아니라 내용의 유사성도 고려하여 중복 제거
 3. 기사의 중요도와 신뢰성을 평가하여 우선순위 결정
 4. 최소 15개 이상의 서로 다른 관점의 기사 확보
 
 **요약 작성 지침:**
-- 각 주요 뉴스 카테고리별로 상세한 분석 제공 (재무성과, 사업전략, 시장동향, 기술개발, 인사/조직, 규제/정책 등)
+- 각 주요 뉴스 카테고리별로 상세한 분석 제공 (재무성과, 사업전략, 시장동향, 기술개발, 규제/정책 등)
 - 시간순 흐름과 인과관계를 명확히 설명
 - 기업에 미치는 영향과 시사점을 구체적으로 분석
 - 전체 요약 길이는 최소 500자 이상으로 작성
@@ -329,12 +329,6 @@ async def company_analysis_all(company_name, base, plus, fin, swot, user_prompt)
         news_context = f"""
 {company_name} 기업에 대한 종합적인 뉴스 분석을 수행하세요.
 
-**수집 전략:**
-1. 기본 검색: "{company_name}" (최신 {num_news//2}개)
-2. 확장 검색: 주요 제품/서비스명, CEO명, 계열사명 등으로 추가 검색 ({num_news//2}개)
-3. 중복 제거: 제목 유사도 80% 이상 및 내용 유사도 70% 이상인 기사 제거
-4. 품질 필터링: 신뢰할 수 있는 언론사 우선, 보도자료성 기사는 후순위
-
 **분석 요구사항:**
 - 최종적으로 최소 15개 이상의 서로 다른 관점의 기사 확보
 - 다음 카테고리별로 분류하여 분석:
@@ -342,7 +336,6 @@ async def company_analysis_all(company_name, base, plus, fin, swot, user_prompt)
   * 신사업 및 전략 관련  
   * 기술개발 및 혁신 관련
   * 시장 및 경쟁 환경 관련
-  * 인사 및 조직 변화 관련
   * 규제 및 정책 영향 관련
   * 기타 중요 이슈
 
@@ -353,6 +346,10 @@ async def company_analysis_all(company_name, base, plus, fin, swot, user_prompt)
 - 구체적 수치나 날짜 포함
 - 기업에 미치는 단기/장기 영향 분석
 
+**주의사항:**
+- summary에는 요약 내용만 포함하고, 'XX기업 뉴스 종합 분석'과 같은 제목은 포함하지 않습니다.
+- 뉴스 기사 url은 summary에 포함하지 않습니다.
+- 뉴스 기사 url은 urls에 포함합니다.
 
 포함할 내용: summary, urls
 """
@@ -478,6 +475,9 @@ swot_analysis MCP를 활용하여 사용자의 요청 사항을 반영하는 SWO
     
     # 3. 분석 작업 실행
     try:
+        
+        dart_result = dict() 
+        
         # 각 작업을 직접 실행
         logger.info(f"분석 작업 시작: {company_name}")
         
@@ -485,18 +485,15 @@ swot_analysis MCP를 활용하여 사용자의 요청 사항을 반영하는 SWO
         default_info_result = await perform_default_info_search()
         logger.info(f"기본 정보 검색 완료: {company_name}")
         
-        dart_result = dict() 
         if base or plus or fin:
             logger.info(f"DART 분석 시작: {company_name}")
-            dart_result = await perform_dart_analysis()
+            dart_result.update(await perform_dart_analysis())
+            dart_result["company_brand"] = default_info_result.company_brand
+            dart_result["company_vision"] = default_info_result.company_vision
             logger.info(f"DART 분석 완료: {company_name}")
         else: 
-            dart_result = {
-                "company_brand": default_info_result.company_brand,
-                "company_vision": default_info_result.company_vision,
-                "company_analysis": "",
-                "company_finance": "",
-            }
+            dart_result["company_analysis"] = ""
+            dart_result["company_finance"] = ""
         
         logger.info(f"뉴스 분석 시작: {company_name}")
         news_result = await perform_news_analysis()
