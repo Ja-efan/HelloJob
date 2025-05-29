@@ -84,7 +84,7 @@ function SWOTAnalysis({
                 종합 분석
               </h2>
               <div className="mt-4 p-5 rounded-xl shadow-sm bg-stone-100 transition-all">
-                <p className="text-sm whitespace-pre-wrap text-[#2A2C35]">
+                <p className="text-base whitespace-pre-wrap text-[#2A2C35]">
                   {reportDetail.swotSummary}
                 </p>
               </div>

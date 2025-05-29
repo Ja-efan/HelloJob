@@ -51,9 +51,9 @@ function NewsInformation({
               </div>
               <div>
                 <p className="text-sm text-[#6E7180] mb-2">뉴스 분석 내용</p>
-                <p className="leading-relaxed text-[#2A2C35]">
+                <div className="leading-relaxed text-[#2A2C35] whitespace-pre-line">
                   {reportDetail.newsAnalysisData}
-                </p>
+                </div>
               </div>
             </div>
           </div>
