@@ -476,7 +476,13 @@ swot_analysis MCP를 활용하여 사용자의 요청 사항을 반영하는 SWO
     # 3. 분석 작업 실행
     try:
         
-        dart_result = dict() 
+        # dart_result 초기화 시 기본값 설정
+        dart_result = {
+            "company_brand": "정보 없음",
+            "company_vision": "정보 없음",
+            "company_analysis": "",
+            "company_finance": ""
+        }
         
         # 각 작업을 직접 실행
         logger.info(f"분석 작업 시작: {company_name}")
@@ -485,15 +491,19 @@ swot_analysis MCP를 활용하여 사용자의 요청 사항을 반영하는 SWO
         default_info_result = await perform_default_info_search()
         logger.info(f"기본 정보 검색 완료: {company_name}")
         
+        # 기본 정보는 항상 설정
+        dart_result["company_brand"] = default_info_result.company_brand or "정보 없음"
+        dart_result["company_vision"] = default_info_result.company_vision or "정보 없음"
+        
         if base or plus or fin:
             logger.info(f"DART 분석 시작: {company_name}")
-            dart_result.update(await perform_dart_analysis())
-            dart_result["company_brand"] = default_info_result.company_brand
-            dart_result["company_vision"] = default_info_result.company_vision
+            dart_analysis_result = await perform_dart_analysis()
+            # DART 분석 결과로 업데이트 (기본 정보는 유지)
+            dart_result.update({
+                "company_analysis": dart_analysis_result.get("company_analysis", ""),
+                "company_finance": dart_analysis_result.get("company_finance", "")
+            })
             logger.info(f"DART 분석 완료: {company_name}")
-        else: 
-            dart_result["company_analysis"] = ""
-            dart_result["company_finance"] = ""
         
         logger.info(f"뉴스 분석 시작: {company_name}")
         news_result = await perform_news_analysis()
@@ -543,6 +553,10 @@ swot_analysis MCP를 활용하여 사용자의 요청 사항을 반영하는 SWO
         
         # 기본 결과
         return {
+            "default": {
+                "company_brand": "처리 중 오류 발생",
+                "company_vision": "처리 중 오류 발생"
+            },
             "company_brand": "처리 중 오류 발생",
             "company_analysis": f"기업 분석 중 오류가 발생했습니다: {str(e)}",
             "company_vision": "처리 중 오류 발생",
