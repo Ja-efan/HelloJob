@@ -153,6 +153,21 @@ async def get_corp_code_by_name(corp_name: str) -> Tuple[str, str]:
     logger.info(f"회사 코드 검색 시작: 회사명='{corp_name}', URL={url}")
     
     try:
+        # 4개 은행 코드 추가 (dart 공시 검색 시 오류 발생하여 추가)
+        if corp_name == "신한은행" or corp_name == "신한 은행":
+            corp_code, matched_name = "00149293", "신한은행"
+            return (corp_code, matched_name)
+        elif corp_name == "국민은행" or corp_name == "국민 은행":
+            corp_code, matched_name = "00386937", "국민은행"
+            return (corp_code, matched_name)
+        elif corp_name == "하나은행" or corp_name == "하나 은행":
+            corp_code, matched_name = "00158909", "하나은행"
+            return (corp_code, matched_name)
+        elif corp_name == "우리은행" or corp_name == "우리 은행":
+            corp_code, matched_name = "00254045", "우리은행"
+            return (corp_code, matched_name)
+        else:
+            pass
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
                 logger.info(f"DART API 요청 시작: corpCode.xml API 호출 중")
