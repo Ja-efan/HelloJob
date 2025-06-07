@@ -76,6 +76,9 @@ public class SSEService {
     }
 
     public void sendToUser(Integer userId, String eventName, Object data) {
+        log.debug("왜 두 번 찍히는거야 !!!!!");
+        log.debug("eventName: {}", eventName);
+
         // 일단 큐에 넣음
         queueEvent(userId, eventName, data);
         Deque<SseEmitter> emittersDeque = getEmitters(userId);

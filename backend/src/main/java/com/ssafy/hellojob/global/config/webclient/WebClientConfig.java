@@ -37,10 +37,10 @@ public class WebClientConfig {
 
         HttpClient httpClient = HttpClient.create()
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10_000) // 연결 타임아웃 (10초)
-                .responseTimeout(Duration.ofMinutes(5))               // 응답 타임아웃 (3분)
+                .responseTimeout(Duration.ofMinutes(10))               // 응답 타임아웃 (3분)
                 .doOnConnected(conn -> conn
-                        .addHandlerLast(new ReadTimeoutHandler(180, TimeUnit.SECONDS))
-                        .addHandlerLast(new WriteTimeoutHandler(180, TimeUnit.SECONDS)));
+                        .addHandlerLast(new ReadTimeoutHandler(600, TimeUnit.SECONDS))
+                        .addHandlerLast(new WriteTimeoutHandler(600, TimeUnit.SECONDS)));
 
         ExchangeStrategies strategies = ExchangeStrategies.builder()
                 .codecs(configurer -> {

@@ -46,6 +46,11 @@ public class OAuth2UserService extends DefaultOAuth2UserService {
         User user = userRepository.findByEmail(email)
                 .orElseGet(() -> createUser(email, nickname, provider, providerId));
 
+        // 발표 시연 시 팀원 제외 다른 사람들 로그인 차단
+//        if(user.getUserId() > 6) {
+//            throw new BaseException(INVALID_USER);
+//        }
+
         // 사용자가 있고 탈퇴 상태라면 예외 발생
         if (Boolean.TRUE.equals(user.getWithdraw())) {
             throw new OAuth2AuthenticationException(

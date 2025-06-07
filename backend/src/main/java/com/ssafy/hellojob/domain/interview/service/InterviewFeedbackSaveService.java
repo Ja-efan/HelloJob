@@ -9,9 +9,11 @@ import com.ssafy.hellojob.domain.interview.entity.InterviewAnswer;
 import com.ssafy.hellojob.domain.interview.entity.InterviewVideo;
 import com.ssafy.hellojob.domain.interview.repository.InterviewAnswerRepository;
 import com.ssafy.hellojob.domain.interview.repository.InterviewVideoRepository;
+import com.ssafy.hellojob.global.common.commitevent.entity.InterviewFeedbackSavedEvent;
 import com.ssafy.hellojob.global.exception.BaseException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +30,7 @@ public class InterviewFeedbackSaveService {
     private final InterviewAnswerRepository interviewAnswerRepository;
     private final InterviewVideoRepository interviewVideoRepository;
     private final InterviewReadService interviewReadService;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     @Transactional
     public Map<String, String> saveTitle(Integer videoId, String title){
@@ -37,15 +40,13 @@ public class InterviewFeedbackSaveService {
     }
 
     @Transactional
-    public EndInterviewResponseDto saveFeedback(InterviewFeedbackFastAPIResponseDto fastAPIResponseDto, List<InterviewAnswer> interviewAnswers, InterviewVideo interviewVideo){
+    public EndInterviewResponseDto saveFeedback(Integer userId, InterviewFeedbackFastAPIResponseDto fastAPIResponseDto, List<InterviewAnswer> interviewAnswers, InterviewVideo interviewVideo){
         
         log.debug("😎 saveFeedback 함수 들어옴");
         log.debug("😎 fastAPIResponseDto.getOverall_feedback() : {}", fastAPIResponseDto.getOverall_feedback());
 
         // 꼬리 질문 json 직렬화
-        interviewVideo.addInterviewFeedback(fastAPIResponseDto.getOverall_feedback());
-        interviewVideo.feedbackEnd(true);
-        interviewVideoRepository.save(interviewVideo);
+        interviewVideoRepository.saveFeedback(interviewVideo.getInterviewVideoId(), fastAPIResponseDto.getOverall_feedback());
 
         for (SingleInterviewFeedbackFastAPIResponseDto singleInterviewFeedback : fastAPIResponseDto.getSingle_feedbacks()) {
 
@@ -64,10 +65,15 @@ public class InterviewFeedbackSaveService {
 
             log.debug("jsonFeedbacks: {}", jsonFeedbacks);
 
-            targetAnswer.addInterviewAnswerFeedback(singleInterviewFeedback.getFeedback());
-            targetAnswer.addInterviewFollowUpQuestion(jsonFeedbacks);
-            interviewAnswerRepository.save(targetAnswer);
+            interviewAnswerRepository.saveInterviewFeedback(
+                    singleInterviewFeedback.getInterview_answer_id(),
+                    singleInterviewFeedback.getFeedback(),
+                    jsonFeedbacks);
         }
+
+        applicationEventPublisher.publishEvent(
+                new InterviewFeedbackSavedEvent(userId, interviewVideo.getInterviewVideoId())
+        );
 
         return EndInterviewResponseDto.builder()
                 .interviewVideoId(interviewVideo.getInterviewVideoId())

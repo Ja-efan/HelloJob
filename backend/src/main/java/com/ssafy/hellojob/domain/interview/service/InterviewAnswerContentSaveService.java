@@ -28,8 +28,7 @@ public class InterviewAnswerContentSaveService {
         try{
             log.debug("🔍 트랜잭션 활성 여부: {}", TransactionSynchronizationManager.isActualTransactionActive());
 
-            interviewAnswer.addInterviewAnswer(answer);
-            interviewAnswerRepository.save(interviewAnswer);
+            interviewAnswerRepository.saveInterviewAnswer(interviewAnswer.getInterviewAnswerId(), answer);
             interviewAnswerRepository.flush();
 
             log.debug("✅ flush 완료");
@@ -49,9 +48,12 @@ public class InterviewAnswerContentSaveService {
 
     @Transactional
     public void saveAllAnswerData(String url, String videoLength, InterviewAnswer interviewAnswer) {
-        interviewAnswer.addInterviewVideoUrl(url);
-        interviewAnswer.addVideoLength(videoLength);
+//        interviewAnswer.addInterviewVideoUrl(url);
+//        interviewAnswer.addVideoLength(videoLength);
+//        interviewAnswerRepository.save(interviewAnswer);
         interviewAnswerRepository.flush();
+
+        log.debug("😎 S3 url db에 저장 완.");
     }
 
 

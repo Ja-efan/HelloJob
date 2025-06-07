@@ -12,7 +12,17 @@ export interface Section {
 }
 
 export const parseData = (data: string): Section[] => {
-  const lines = data.trim().split("\n");
+  // 중괄호 내부의 개행을 제거하는 전처리
+  const preprocessData = (text: string): string => {
+    return text.replace(/\{([^}]+)\}/g, (_, content) => {
+      // 중괄호 내부의 개행과 연속된 공백을 단일 공백으로 변환
+      const cleanContent = content.replace(/\s+/g, " ").trim();
+      return `{${cleanContent}}`;
+    });
+  };
+
+  const preprocessedData = preprocessData(data);
+  const lines = preprocessedData.trim().split("\n");
   const result: Section[] = [];
   const titleRegex = /\(\((.+)\)\)/;
   const subtitleRegex = /\((.+)\) : {(.+)}/;

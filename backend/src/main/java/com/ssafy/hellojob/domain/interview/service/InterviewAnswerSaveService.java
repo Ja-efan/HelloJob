@@ -1,15 +1,15 @@
 package com.ssafy.hellojob.domain.interview.service;
 
-import com.ssafy.hellojob.domain.interview.entity.CoverLetterInterview;
-import com.ssafy.hellojob.domain.interview.entity.Interview;
-import com.ssafy.hellojob.domain.interview.entity.InterviewAnswer;
-import com.ssafy.hellojob.domain.interview.entity.InterviewVideo;
+import com.ssafy.hellojob.domain.interview.entity.*;
 import com.ssafy.hellojob.domain.interview.repository.InterviewAnswerRepository;
 import com.ssafy.hellojob.domain.user.service.UserReadService;
+import com.ssafy.hellojob.global.common.commitevent.entity.InterviewAnswerSavedEvent;
+import com.ssafy.hellojob.global.common.commitevent.entity.InterviewVideoSavedEvent;
 import com.ssafy.hellojob.global.exception.BaseException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,7 +22,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import static com.ssafy.hellojob.global.exception.ErrorCode.*;
+import static com.ssafy.hellojob.global.exception.ErrorCode.INVALID_USER;
 
 @Slf4j
 @Service
@@ -33,6 +33,9 @@ public class InterviewAnswerSaveService {
     private final UserReadService userReadService;
     private final InterviewReadService interviewReadService;
     private final InterviewAnswerContentSaveService interviewAnswerContentSaveService;
+    private final ApplicationEventPublisher applicationEventPublisher;
+    private final InterviewVideoReadService interviewVideoReadService;
+
 
     @Value("${FFPROBE_PATH}")
     private String ffprobePath;
@@ -42,25 +45,29 @@ public class InterviewAnswerSaveService {
 
     // 동영상 저장
     @Transactional
-    public Map<String, String> saveVideo(Integer userId, String url, Integer interviewAnswerId, File tempVideoFile){
+    public Map<String, String> saveVideo(Integer userId, String url, String videoLength, Integer interviewAnswerId, File tempVideoFile){
         userReadService.findUserByIdOrElseThrow(userId);
         InterviewAnswer interviewAnswer = interviewReadService.findInterviewAnswerByIdOrElseThrow(interviewAnswerId);
 
-        String videoLength = "";
-        try {
-            videoLength = getVideoDurationWithFFprobe(tempVideoFile);
-        } catch (Exception e){
-            log.debug("영상 길이 추출 실패 - Exception: {}", e);
-            throw new BaseException(GET_VIDEO_LENGTH_FAIL);
-        }
+        log.debug("😎 S3 url: {}", url);
+        log.debug("😎 영상 시간: {}", videoLength);
+        log.debug("😎 답변: {}", interviewAnswer.getInterviewAnswer());
 
         try{
-            interviewAnswerContentSaveService.saveAllAnswerData(url, videoLength, interviewAnswer);
+            interviewAnswerRepository.saveVideoUrl(interviewAnswerId, url, videoLength);
+//            interviewAnswerContentSaveService.saveAllAnswerData(url, videoLength, interviewAnswer);
         } catch(Exception e){
             log.debug("😱 삐상 !!! 영상 시간 저장 중 에러 발생 !!!: {}", e);
         }
 
         interviewAnswerRepository.flush();
+
+        if(interviewAnswerRepository.countByInterviewVideoId(interviewAnswer.getInterviewVideo().getInterviewVideoId()) == interviewAnswerRepository.countSavedVideoByInterviewVideoId(interviewAnswer.getInterviewVideo().getInterviewVideoId())){
+            applicationEventPublisher.publishEvent(
+                    new InterviewVideoSavedEvent(userId, interviewAnswer.getInterviewVideo().getInterviewVideoId())
+            );
+
+        }
 
         return Map.of("message", "정상적으로 저장되었습니다.");
     }
@@ -85,13 +92,9 @@ public class InterviewAnswerSaveService {
             answer = "stt 변환에 실패했습니다";
         }
 
-        try{
-            interviewAnswerContentSaveService.saveAnswer(answer, interviewAnswer);
-        } catch(Exception e){
-            log.debug("😱 id:{} 삐상 !!! 답변 저장 중 에러 발생 !!!: {}", interviewAnswerId, e);
-        }
-
+        interviewAnswerRepository.saveInterviewAnswer(interviewAnswerId, answer);
         interviewAnswerRepository.flush();
+        applicationEventPublisher.publishEvent(new InterviewAnswerSavedEvent(interviewAnswer, userId));
 
         return Map.of("message", "정상적으로 저장되었습니다.");
     }

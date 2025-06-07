@@ -1,10 +1,7 @@
-import json
-import hashlib
-from agents import Agent
+import os
+from openai import OpenAI
+from agents import Agent, Runner
 from app.schemas.cover_letter import *
-from app.core.openai_utils import get_rate_limiter
-from app.core.agent_utils import RateLimitedRunner
-from app.core.request_queue import get_request_queue
 from app.core.mcp_core import get_mcp_servers
 from app.core.logger import app_logger
 
@@ -17,14 +14,8 @@ async def create_cover_letter(
     company_analysis: CompanyAnalysis, 
     job_role_analysis: Optional[JobRoleAnalysis] = None) -> CoverLetterItem:
     
-    # 요청 큐 가져오기
-    request_queue = get_request_queue()
-    
     # mcp 서버 가져오기
     mcp_servers = get_mcp_servers()
-    
-    # 캐시 키 생성
-    cache_key = f"cover_letter_{content.content_number}_{hashlib.md5(content.content_question.encode()).hexdigest()}"
     
     # 경험 정보 텍스트 구성
     experiences_text = ""
@@ -225,39 +216,18 @@ async def create_cover_letter(
     
 이 모든 지침을 따라 당신은 채용 시장에서 합격 가능성을 높이는 맞춤형이고 전략적인 자기소개서를 작성합니다.
 
-자기소개서 작성을 위해 반드시 **전략(sequential-thinking 사용)**을 세우고, 자기소개서 작성 결과를 반환합니다.
-
 답변은 반드시 자기소개서만 작성합니다. 자기소개서 이외 내용은 포함하면 안됩니다."""
 
-    
     # 실제 OpenAI API 호출을 수행하는 함수
     async def perform_api_call():
-        
-        
         cover_letter_agent = Agent(
             name="CoverLetter Draft Assistant",
             instructions=system_prompt,
             model="gpt-4.1",
-            mcp_servers=mcp_servers,
             output_type=CoverLetterItem
         )
         
-        # rate_limiter = get_rate_limiter()
-        # response = await rate_limiter.chat_completion(
-        #     model="gpt-4.1", 
-        #     messages=[
-        #         {"role": "system", "content": system_prompt},
-        #         {"role": "user", "content": prompt}
-        #     ],
-        #     temperature=0.7,
-        #     max_tokens=1500,
-        #     response_format=CoverLetterItem
-        # )
-        
-        # # API 응답에서 자기소개서 내용 추출
-        # cover_letter = response.choices[0].message.parsed
-        
-        response = await RateLimitedRunner.run(
+        response = await Runner.run(
             starting_agent=cover_letter_agent,
             input=prompt,
             max_turns=30
@@ -265,13 +235,8 @@ async def create_cover_letter(
         
         return response.final_output
     
-    # 요청 큐에 넣고 실행 (캐싱 적용)
-    cover_letter = await request_queue.enqueue(
-        perform_api_call,
-        priority=5,  # 우선순위 (낮을수록 우선)
-        estimated_tokens=3000,
-        cache_key=cache_key
-    )
+    # 직접 API 호출 실행
+    cover_letter = await perform_api_call()
     
     logger.info(f"자기소개서 초안 작성 완료: {cover_letter}")
     return cover_letter
@@ -314,13 +279,6 @@ async def parse_edit_suggestion(ai_message: EditSuggestionList) -> str:
 
 
 async def edit_cover_letter_service(request: EditCoverLetterRequest) -> str:
-    
-    # 요청 큐 가져오기
-    request_queue = get_request_queue()
-    
-    # 캐시 키 생성
-    user_msg_hash = hashlib.md5(request.edit_content.user_message.encode()).hexdigest()
-    cache_key = f"edit_cover_letter_{request.edit_content.content_number}_{user_msg_hash}"
     
     # 기업 분석 정보
     company_analysis = request.company_analysis
@@ -419,9 +377,9 @@ async def edit_cover_letter_service(request: EditCoverLetterRequest) -> str:
     """
     
     # 실제 OpenAI API 호출을 수행하는 함수
-    async def perform_api_call():
-        rate_limiter = get_rate_limiter()
-        response = await rate_limiter.chat_completion(
+    def perform_api_call():
+        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+        response = client.beta.chat.completions.parse(
             model="gpt-4.1",
             messages=[
                 {"role": "system", "content": "당신은 '제트'라는 이름의 AI로, 전문적인 자기소개서 수정 도우미입니다. 기업과 직무 분석을 바탕으로 지원자의 경험과 프로젝트를 잘 활용하여 맞춤형 자기소개서 수정 방향을 제시해주세요. 직접적인 수정은 절대 하지 말고 수정 방향만 제안해주세요. 수정 제안은 반드시 JSON 형식으로 작성해주세요."},
@@ -432,32 +390,11 @@ async def edit_cover_letter_service(request: EditCoverLetterRequest) -> str:
             response_format=EditSuggestionList
         )
         
-        # API 응답 JSON 추출 및 파싱
-        suggestion_json = response.choices[0].message.content.strip()
-        return suggestion_json
+        # API 응답에서 파싱된 객체 반환
+        return response.choices[0].message.parsed
     
-    # 요청 큐에 넣고 실행 (캐싱 적용)
-    suggestion_json = await request_queue.enqueue(
-        perform_api_call,
-        priority=5,  # 우선순위 (낮을수록 우선)
-        estimated_tokens=3000,
-        cache_key=cache_key
-    )
-    
-    # JSON 파싱 및 변환
-    edit_suggestions = json.loads(suggestion_json)
-    
-    print(f"********** edit_suggestions: {edit_suggestions}")
-    
-    # 수정 제안 변환
-    suggestions_list = EditSuggestionList(suggestions=[
-        EditSuggestion(
-            original_content=suggestion.get("original_content", ""),
-            edit_reason=suggestion.get("edit_reason", ""),
-            edit_suggestion=suggestion.get("edit_suggestion", "")
-        )
-        for suggestion in edit_suggestions["suggestions"]
-    ])
+    # 직접 API 호출 실행
+    suggestions_list = perform_api_call()
     
     # 포맷팅된 결과 반환
     ai_message_str = await parse_edit_suggestion(suggestions_list)
@@ -626,8 +563,6 @@ async def get_chat_type(user_message: str) -> str:
     
     """
     
-    request_queue = get_request_queue()
-    
     system_prompt = """
 당신은 '제트'라는 이름의 AI로, 사용자의 메시지를 분석하여 대화의 목적을 파악하는 전문가입니다. 다음 중 가장 적절한 대화 타입을 선택하고, 선택한 타입만을 반환하세요.
 
@@ -640,7 +575,7 @@ async def get_chat_type(user_message: str) -> str:
 - 자기소개서 혹은 취업 관련 내용이 조금이라도 포함되어 있으면 coverletter 타입으로 판단합니다.
 """
     
-    async def perform_api_call(
+    def perform_api_call(
         model="gpt-4.1",
         system_prompt=None,
         user_message=None,
@@ -648,34 +583,44 @@ async def get_chat_type(user_message: str) -> str:
         max_tokens=100,
         response_format=None):
         
-        rate_limiter = get_rate_limiter()
+        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
         
-        response = await rate_limiter.chat_completion(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message}
-            ],
-            temperature=temperature,
-            max_tokens=max_tokens,
-            response_format=response_format if response_format else None
-        )
+        if response_format:
+            response = client.beta.chat.completions.parse(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                temperature=temperature,
+                max_tokens=max_tokens,
+                response_format=response_format
+            )
+        else:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
         
         # API 응답 반환
         return response
     
-    chat_type_response = await request_queue.enqueue(
-        perform_api_call,
-        kwargs={
-            "model": "gpt-4.1",
-            "system_prompt": system_prompt,
-            "user_message": user_message,
-            "temperature": 0.3,
-            "max_tokens": 100,
-            "response_format": ChatTypeResponse
-        },
-        priority=3,  # 우선순위 (낮을수록 우선)
+    # 직접 API 호출 실행
+    chat_type_response = perform_api_call(
+        model="gpt-4.1",
+        system_prompt=system_prompt,
+        user_message=user_message,
+        temperature=0.3,
+        max_tokens=100,
+        response_format=ChatTypeResponse
     )
+    
+    # 응답에서 chat_type 추출
     chat_type = chat_type_response.choices[0].message.parsed.chat_type
     logger.info(f"chat_type: {chat_type}")
     return chat_type
@@ -695,29 +640,38 @@ async def chat_with_cover_letter_service(request: ChatCoverLetterRequest) -> dic
         logger.info(f"chat_with_cover_letter_service 호출")
         logger.info(f"user_message: {request.user_message}")
         
-        request_queue = get_request_queue()
-    
-        async def perform_api_call(
+        def perform_api_call(
             model="gpt-4.1", 
             system_prompt="", 
             user_message="", 
-            temperature=0.3,
-            max_tokens=100, 
+            temperature=0.5,
+            max_tokens=1500, 
             response_format=None):
             
             try: 
-                rate_limiter = get_rate_limiter()
-            
-                response = await rate_limiter.chat_completion(
-                    model=model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_message}
-                    ],
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    response_format=response_format if response_format else None
-                )
+                client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+                
+                if response_format:
+                    response = client.beta.chat.completions.parse(
+                        model=model,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_message}
+                        ],
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        response_format=response_format
+                    )
+                else:
+                    response = client.chat.completions.create(
+                        model=model,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_message}
+                        ],
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                    )
             
                 return response 
             except Exception as e:
@@ -747,16 +701,13 @@ async def chat_with_cover_letter_service(request: ChatCoverLetterRequest) -> dic
 
         try:
             # step2: 프롬프트 분기에 따른 응답 반환
-            chat_response = await request_queue.enqueue(
-                perform_api_call,
-                kwargs={
-                    "model": "gpt-4.1",
-                    "system_prompt": system_prompt_chat,
-                    "user_message": request.user_message,
-                    "temperature": 0.3,
-                    "max_tokens": 3000,
-                },
-                priority=3,  # 우선순위 (낮을수록 우선)
+            chat_response = perform_api_call(
+                model="gpt-4.1",
+                system_prompt=system_prompt_chat,
+                user_message=request.user_message,
+                temperature=0.3,
+                max_tokens=3000,
+                response_format=ChatCoverLetterResponse
             )
             
             # 응답 형식에 따른 파싱

@@ -4,6 +4,7 @@ import com.ssafy.hellojob.domain.interview.dto.request.*;
 import com.ssafy.hellojob.domain.interview.dto.response.*;
 import com.ssafy.hellojob.domain.interview.service.*;
 import com.ssafy.hellojob.global.auth.token.UserPrincipal;
+import com.ssafy.hellojob.global.exception.BaseException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -14,6 +15,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+
+import static com.ssafy.hellojob.global.exception.ErrorCode.GET_VIDEO_LENGTH_FAIL;
 
 @Slf4j
 @RestController
@@ -150,7 +153,7 @@ public class InterviewController {
     @PostMapping("/practice/question")
     public void stopVoiceRecoding(@RequestPart("interviewAnswerId") String interviewAnswerId,
                                   @RequestPart("audioFile") MultipartFile audioFile,
-                                  @AuthenticationPrincipal UserPrincipal userPrincipal) throws IOException {
+                                  @AuthenticationPrincipal UserPrincipal userPrincipal) {
 
         log.debug("😎 면접 한 문항 종료 요청 들어옴 : {}", interviewAnswerId);
 
@@ -182,14 +185,23 @@ public class InterviewController {
     @PostMapping("/practice/video")
     public Map<String, String> saveVideo(@RequestPart("interviewAnswerId") String interviewAnswerId,
                                          @RequestPart("videoFile") MultipartFile videoFile,
-                                         @AuthenticationPrincipal UserPrincipal userPrincipal) throws IOException {
+                                         @AuthenticationPrincipal UserPrincipal userPrincipal) throws IOException, InterruptedException {
 
         String url = s3UploadService.uploadVideo(videoFile);
 
         File tempVideoFile = File.createTempFile("video", ".webm");  // 또는 확장자 추출해서 지정
         videoFile.transferTo(tempVideoFile);
 
-        return interviewAnswerSaveService.saveVideo(userPrincipal.getUserId(), url, Integer.parseInt(interviewAnswerId), tempVideoFile);
+        String videoLength = "";
+        try {
+            videoLength = interviewAnswerSaveService.getVideoDurationWithFFprobe(tempVideoFile);
+        } catch (Exception e){
+            log.debug("영상 길이 추출 실패 - Exception: {}", e);
+            throw new BaseException(GET_VIDEO_LENGTH_FAIL);
+        }
+
+        Thread.sleep(2000);
+        return interviewAnswerSaveService.saveVideo(userPrincipal.getUserId(), url, videoLength, Integer.parseInt(interviewAnswerId), tempVideoFile);
     }
 
     // fast API 자소서 기반 질문 생성
@@ -199,14 +211,11 @@ public class InterviewController {
         return interviewService.createCoverLetterQuestion(userPrincipal.getUserId(), coverLetterIdRequestDto);
     }
 
-    // 면접 종료
+    // 면접 종료(제목 + 종료 시간 저장)
     @PostMapping("/practice/end")
     public Map<String, String> endInterview(@RequestBody EndInterviewRequestDto videoInfo,
-                                            @AuthenticationPrincipal UserPrincipal userPrincipal) throws InterruptedException {
-
-        interviewFeedbackSaveService.saveTitle(videoInfo.getInterviewVideoId(), videoInfo.getInterviewTitle());
-        Thread.sleep(30 * 1000);
-        return interviewService.endInterview(userPrincipal.getUserId(), videoInfo);
+                                            @AuthenticationPrincipal UserPrincipal userPrincipal) {
+        return interviewService.saveInterviewTitle(userPrincipal.getUserId(), videoInfo);
     }
 
     // 면접 피드백 상세 조회

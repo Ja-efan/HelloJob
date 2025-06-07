@@ -4,6 +4,8 @@ from app.mcp.dart_mcp import dart
 from app.services import interview_service
 from app.schemas import interview
 import logging
+from app.services.gms import cover_letter_service as gms_cover_letter_service
+from app.schemas import cover_letter
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +79,8 @@ async def test_gms(user_input: str):
 
 @router.post("/gms/mcp-server-config")
 async def test_mcp_server_config(server_list: str|list[str] = 'all'):
+    
+    
     from app.services.gms.utils import gms_utils
     
     logger.info(f"server_list: {server_list}")
@@ -90,3 +94,32 @@ async def test_mcp_server_config(server_list: str|list[str] = 'all'):
             return {"server_list": config}
     except Exception as e:
         return {"error": str(e)}
+    
+    
+@router.post("/gms/cover-letter")
+async def test_gms_create_cover_letter(request: cover_letter.CreateCoverLetterRequest):
+    cover_letters_result = await gms_cover_letter_service.create_cover_letter_all(request)
+    logger.info(f"CreateCoverLetterResponse: {cover_letters_result}")
+    return cover_letter.CreateCoverLetterResponse(cover_letters=cover_letters_result)
+
+
+@router.post("/gms/cover-letter/chat")
+async def test_gms_chat_cover_letter(request: cover_letter.ChatCoverLetterRequest):
+    response = await gms_cover_letter_service.chat_with_cover_letter_service(request)
+    # logger.info(f"ChatCoverLetterResponse: {response}")
+    if response["status"] == "success":
+        response = cover_letter.ChatCoverLetterResponse(
+            status=response["status"],
+            user_message=request.user_message,
+            ai_message=response["content"]
+        )
+        logger.info(f"ChatCoverLetterResponse: {response}")
+        return response
+    else:
+        response = cover_letter.ChatCoverLetterResponse(
+            status=response["status"],
+            user_message=request.user_message,
+            ai_message=response["content"]
+        )
+        logger.info(f"ChatCoverLetterResponse: {response}")
+        return response

@@ -89,7 +89,7 @@ function CoverLetterList() {
           </div> */}
         </div>
         <Button variant="default">
-          <Link to="/mypage/cover-letter/new" className="flex items-center">
+          <Link to="/cover-letter" className="flex items-center">
             <FaPlus className="mr-2" /> 자기소개서 작성
           </Link>
         </Button>

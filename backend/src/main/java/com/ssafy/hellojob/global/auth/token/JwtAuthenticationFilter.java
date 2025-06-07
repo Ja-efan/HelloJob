@@ -4,6 +4,7 @@ import com.ssafy.hellojob.domain.user.entity.User;
 import com.ssafy.hellojob.domain.user.repository.UserRepository;
 import com.ssafy.hellojob.global.exception.BaseException;
 import com.ssafy.hellojob.global.util.JwtUtil;
+import com.ssafy.hellojob.global.util.SseUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -41,8 +42,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String token = jwtUtil.extractAccessToken(request);
         if (token == null) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            return;
+            if (response.isCommitted()) return;
+            if (SseUtil.isSseRequest(request)) {
+                SseUtil.writeSseError(response, HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized\n\n");
+                response.getWriter().flush();
+            } else {
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            }
         }
 
         try {

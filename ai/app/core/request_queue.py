@@ -32,8 +32,8 @@ class APIRequestQueue:
     """
     
     def __init__(self, 
-                 max_tpm: int = 30000,  # 기본 Tier 1 한도
-                 max_rpm: int = 500,    # 기본 Tier 1 한도
+                 max_tpm: int = 800000,  # 기본 Tier 3 한도 (4.1)
+                 max_rpm: int = 5000,    # 기본 Tier 3 한도 (4.1)
                  min_interval: float = 0.1):  # 요청 간 최소 간격(초)
         """
         Args:

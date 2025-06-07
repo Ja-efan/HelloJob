@@ -103,4 +103,12 @@ public class InterviewReadService {
                 .orElseThrow(() -> new BaseException(INTERVIEW_NOT_FOUND));
     }
 
+    public Integer countTotalQuestions(Integer videoId){
+        return interviewVideoRepository.countTotalAnswer(videoId);
+    }
+
+    public Integer countSavedAnswers(Integer videoId){
+        return interviewVideoRepository.countSavedAnswer(videoId);
+    };
+
 }
