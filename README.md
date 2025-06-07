@@ -425,7 +425,7 @@ src="https://img.shields.io/badge/mcp-%23000000?style=for-the-badge
 ![ERD](exec/img/ERD.png)
 
 ### 아키텍쳐
-![시스템 아키텍쳐](exec/img/시스템%20아키텍쳐.png)
+![시스템 아키텍쳐](exec/img/시스템아키텍쳐.png)
 
 ### 깃 컨벤션
 > | HEAD | 설명 |
